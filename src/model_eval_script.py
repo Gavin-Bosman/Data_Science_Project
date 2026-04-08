@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 from pathlib import Path
 from torch.utils.data import DataLoader
+import matplotlib.pyplot as plt
+import numpy as np
 import flat_transformer as ft
 import linformer as lf
 import lstm as lstm
@@ -23,13 +25,13 @@ test_loader = DataLoader(
 )
 
 # -------------- LSTM SETUP --------------------------- #
-# model = lstm.CNN_LSTM_Model(
-#     input_dim=512,
-#     hidden_dim=256,
-#     num_layers=2,
-#     num_classes=8,
-#     dropout=0.2
-# ).to(device)
+model = lstm.CNN_LSTM_Model(
+    input_dim=512,
+    hidden_dim=256,
+    num_layers=2,
+    num_classes=8,
+    dropout=0.2
+).to(device)
 
 # ------------- LINFORMER SETUP-------------------------- #
 # model = lf.LinformerTemporalTransformer(
@@ -46,25 +48,25 @@ test_loader = DataLoader(
 # ).to(device)
 
 # ------------- FLAT TRANSFORMER SETUP-------------------- #
-model = ft.FlatTemporalTransformer(
-    input_dim=512,
-    d_model=256,
-    num_classes=8,
-    num_clips=7,
-    frames_per_clip=12,
-    nhead=4,
-    num_layers=2,
-    ff_dim=512,
-    dropout=0.2
-).to(device)
+# model = ft.FlatTemporalTransformer(
+#     input_dim=512,
+#     d_model=256,
+#     num_classes=8,
+#     num_clips=7,
+#     frames_per_clip=12,
+#     nhead=4,
+#     num_layers=2,
+#     ff_dim=512,
+#     dropout=0.2
+# ).to(device)
 
 criterion = nn.CrossEntropyLoss()
 
 src_path = Path(__file__).resolve().parent
 # Change last portion of path to current model config
-weights_path = src_path / "transformer_weights" / "best_flat_transformer_weights.pth"
+# weights_path = src_path / "transformer_weights" / "best_flat_transformer_weights.pth"
 # weights_path = src_path / "transformer_weights" / "best_linformer_weights.pth"
-# weights_path = src_path / "transformer_weights" / "best_lstm_weights.pth"
+weights_path = src_path / "transformer_weights" / "best_lstm_weights.pth"
 
 
 model.load_state_dict(torch.load(weights_path))
@@ -105,23 +107,52 @@ test_loss, test_acc, all_preds, all_labels = evaluate_test(
     criterion
 )
 
-print("\n===== Flat Transformer Evaluation =====")
-# print("\n===== LSTM Evaluation =====")
+class_map = {0:"neutral", 1:"calm", 2:"happy", 3:"sad", 4:"angry", 5:"fearful", 6:"disgust", 7:"surprise"}
+
+# print("\n===== Flat Transformer Evaluation =====")
+print("\n===== LSTM Evaluation =====")
 # print("\n===== Linformer Evaluation =====")
 print(f"Loss: {test_loss:.4f}")
 print(f"Accuracy: {test_acc:.2f}%")
 
+class_names = list(class_map.values())
 cm = confusion_matrix(all_labels, all_preds)
-print("\nConfusion Matrix:")
-print(cm)
+# print("\nConfusion Matrix:")
+# print(cm)
+cm = cm.astype("float") / cm.sum(axis=1, keepdims=True)
+
+plt.figure()
+plt.imshow(cm)
+plt.title("Confusion Matrix - LSTM")
+plt.colorbar()
+
+tick_marks = np.arange(len(class_names))
+plt.xticks(tick_marks, class_names, rotation=45)
+plt.yticks(tick_marks, class_names)
+
+# annotate cells
+thresh = cm.max() / 2.0
+
+for i in range(cm.shape[0]):
+    for j in range(cm.shape[1]):
+        value = cm[i, j]
+        text = f"{value:.2f}"
+
+        plt.text(
+            j, i, text,
+            horizontalalignment="center",
+            color="white" if value > thresh else "black"
+        )
+
+plt.ylabel("True Label")
+plt.xlabel("Predicted Label")
+plt.tight_layout()
+plt.show()
 
 # Treats all classes equally
 f1_macro = f1_score(all_labels, all_preds, average="macro")
 # Per class f1
 f1_per_class = f1_score(all_labels, all_preds, average=None)
-
-class_map = {0:"neutral", 1:"calm", 2:"happy", 3:"sad", 4:"angry", 5:"fearful", 6:"disgust", 7:"surprise"}
-
 print(f"\nMacro f1 score: {f1_macro:.4f}")
 print("\nPer-class f1:")
 for i, f1 in enumerate(f1_per_class):
